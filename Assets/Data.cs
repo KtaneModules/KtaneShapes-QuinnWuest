@@ -832,7 +832,7 @@ public class Data
         ["VITALITY"] = P("VAI TA LI TII"),
         ["VOCALIST"] = P("VOU KƏ LIST"),
         ["VOLCANIC"] = P("VOUL KA NIK"),
-        ["WAITRESS"] = P("WEICH RISS"),
+        ["WAITRESS"] = P("WEICH RIS"),
         ["WARRANTY"] = P("WAA RIN TII"),
         ["WASHROOM"] = P("WAASH ROOM"),
         ["WASTEFUL"] = P("WEIST FUL"),
