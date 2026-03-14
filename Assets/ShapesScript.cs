@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using Syl;
 using System.Collections;
+using System.Text.RegularExpressions;
 
 public class ShapesScript : MonoBehaviour
 {
@@ -117,6 +118,7 @@ public class ShapesScript : MonoBehaviour
     private Coroutine _timer;
     private Coroutine _textAnimation;
     private int _buttonCount;
+    private bool _timerActivated;
 
     private void Awake()
     {
@@ -222,8 +224,15 @@ public class ShapesScript : MonoBehaviour
     private IEnumerator Timer()
     {
         yield return new WaitForSeconds(0.75f);
+        _timerActivated = true;
+    }
+
+    private void Update()
+    {
+        if (!_timerActivated)
+            return;
         CheckInput(_input);
-        _input = new List<int>();
+        _timerActivated = false;
     }
 
     private void CheckInput(List<int> input)
@@ -258,13 +267,13 @@ public class ShapesScript : MonoBehaviour
 
     private IEnumerator StrikeTimer()
     {
-        yield return new WaitForSeconds(1.25f);
+        yield return new WaitForSeconds(1f);
         Module.HandleStrike();
     }
 
     private IEnumerator SolveTimer()
     {
-        yield return new WaitForSeconds(1.25f);
+        yield return new WaitForSeconds(1f);
         Audio.PlayGameSoundAtTransform(KMSoundOverride.SoundEffect.CorrectChime, transform);
         _moduleSolved = true;
         Module.HandlePass();
@@ -365,8 +374,8 @@ public class ShapesScript : MonoBehaviour
         var color = correct ? green : red;
         LetterTM.text = letter.ToString();
         LetterTM.color = color;
-        var duration = 1.25f;
-        var holdTime = 0.85f;
+        var duration = 1f;
+        var holdTime = 0.8f;
         var elapsed = 0f;
         Audio.PlaySoundAtTransform("nyoom", transform);
         while (elapsed < duration)
@@ -378,5 +387,196 @@ public class ShapesScript : MonoBehaviour
         }
         LetterTM.transform.localScale = new Vector3(0.01f, 0.01f, 1000f);
         LetterTM.text = "";
+        _input = new List<int>();
+    }
+
+#pragma warning disable 0414
+    private readonly string TwitchHelpMessage = "!{0} press 1 2 3, 1 3 2, 3 2 1 [Press the buttons (numbered in reading order). Semicolons or commas separate input sequences.]";
+#pragma warning restore 0414
+
+    private IEnumerator ProcessTwitchCommand(string command)
+    {
+        command = Regex.Replace(command.Trim().ToLowerInvariant(), @"^\s+", " ");
+        if (Regex.Match(command, @"^\s*reset\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Success)
+        {
+            _input = new List<int>();
+            _strInput = "";
+            Debug.LogFormat("[Shapes #{0}] Input has been reset via Twitch Plays command.", _moduleId);
+            yield return "sendtochat Input has been reset.";
+            yield break;
+        }
+        if (command.StartsWith("press "))
+            command = command.Substring(6);
+        else if (command.StartsWith("submit "))
+            command = command.Substring(7);
+        var cmds = command.Split(new[] { ',', ';' }, System.StringSplitOptions.RemoveEmptyEntries);
+        var list = new List<int>();
+        foreach (var cmd in cmds)
+        {
+            foreach (var ch in cmd)
+            {
+                if (ch == ' ')
+                    continue;
+                var num = ch - '0' - 1;
+                if (num < 0 || num >= _buttonCount)
+                {
+                    yield return $"sendtochaterror {ch} is not a valid button. Command ignored.";
+                    yield break;
+                }
+                list.Add(num);
+            }
+            list.Add(-1);
+        }
+        yield return null;
+        yield return "solve";
+        yield return "strike";
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i] == -1)
+            {
+                yield return new WaitForSeconds(0.1f);
+                if (_timer != null)
+                    StopCoroutine(_timer);
+                _timerActivated = true;
+                yield return null;
+                while (_input.Count != 0)
+                    yield return null;
+                yield return new WaitForSeconds(0.1f);
+            }
+            else
+            {
+                ButtonSels[list[i]].OnInteract();
+                yield return new WaitForSeconds(0.1f);
+            }
+        }
+    }
+
+    private IEnumerator TwitchHandleForcedSolve()
+    {
+        if (_input.Count > 0)
+        {
+            if (_timer != null)
+                StopCoroutine(_timer);
+            _timerActivated = true;
+            yield return null;
+            while (_input.Count != 0 && !_moduleSolved)
+                yield return null;
+        }
+        while (!_moduleSolved)
+        {
+            int progress = _strInput.Length;
+            if (progress == _chosenWord.Key.Length)
+                yield break;
+
+            char ch = _chosenWord.Key[progress];
+            yield return StartCoroutine(SubmitSequence(EncodeLetter(ch)));
+        }
+    }
+
+    private IEnumerator SubmitSequence(IEnumerable<int> presses)
+    {
+        foreach (int ix in presses)
+        {
+            ButtonSels[ix].OnInteract();
+            yield return new WaitForSeconds(0.1f);
+        }
+        if (_timer != null)
+            StopCoroutine(_timer);
+        _timerActivated = true;
+        yield return null;
+        while (_input.Count != 0 && !_moduleSolved)
+            yield return null;
+        yield return new WaitForSeconds(0.1f);
+    }
+
+    private static readonly Dictionary<char, string> _morseEncode = new Dictionary<char, string>()
+    {
+        ['A'] = ".-",
+        ['B'] = "-...",
+        ['C'] = "-.-.",
+        ['D'] = "-..",
+        ['E'] = ".",
+        ['F'] = "..-.",
+        ['G'] = "--.",
+        ['H'] = "....",
+        ['I'] = "..",
+        ['J'] = ".---",
+        ['K'] = "-.-",
+        ['L'] = ".-..",
+        ['M'] = "--",
+        ['N'] = "-.",
+        ['O'] = "---",
+        ['P'] = ".--.",
+        ['Q'] = "--.-",
+        ['R'] = ".-.",
+        ['S'] = "...",
+        ['T'] = "-",
+        ['U'] = "..-",
+        ['V'] = "...-",
+        ['W'] = ".--",
+        ['X'] = "-..-",
+        ['Y'] = "-.--",
+        ['Z'] = "--.."
+    };
+
+    private IEnumerable<int> EncodeLetter(char ch)
+    {
+        ch = char.ToUpperInvariant(ch);
+        if (_buttonCount == 2)
+        {
+            foreach (char c in _morseEncode[ch])
+                yield return c == '.' ? 0 : 1;
+            yield break;
+        }
+        if (_buttonCount == 3)
+        {
+            int value = ch - 'A';
+            yield return value / 9;
+            yield return (value / 3) % 3;
+            yield return value % 3;
+            yield break;
+        }
+        if (_buttonCount == 4)
+        {
+            string[] grid =
+            {
+                "..A..",
+                "BCDEF",
+                "GHIJK",
+                "LM?NO",
+                "PQRST",
+                "UVWXY",
+                "..Z.."
+            };
+            int targetRow = -1, targetCol = -1;
+            for (int r = 0; r < grid.Length; r++)
+                for (int c = 0; c < grid[r].Length; c++)
+                    if (grid[r][c] == ch)
+                    {
+                        targetRow = r;
+                        targetCol = c;
+                    }
+            int row = 3, col = 2;
+            while (row > targetRow)
+            {
+                yield return 0;
+                row--;
+            }
+            while (row < targetRow)
+            {
+                yield return 3;
+                row++;
+            }
+            while (col > targetCol)
+            {
+                yield return 1;
+                col--;
+            }
+            while (col < targetCol)
+            {
+                yield return 2;
+                col++;
+            }
+        }
     }
 }
