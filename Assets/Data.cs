@@ -458,7 +458,7 @@ public class Data
         ["LIFEBOAT"] = P("LAIF BOUT"),
         ["LIFELONG"] = P("LAIF LAANG"),
         ["LIFETIME"] = P("LAIF TAIM"),
-        ["LIGHTING"] = P("LAIT NING"),
+        ["LIGHTING"] = P("LAI TING"),
         ["LIKEWISE"] = P("LAIK WAIZ"),
         ["LIMITING"] = P("LI MI TING"),
         ["LITERACY"] = P("LI TI RƏ SII"),
